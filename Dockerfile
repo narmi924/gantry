@@ -18,7 +18,11 @@ COPY backend/pyproject.toml backend/uv.lock ./
 RUN uv sync --frozen --no-dev --no-install-project
 COPY backend/ ./
 COPY --from=web /web/dist /app/frontend/dist
+# the server runs as an ordinary user; it may write only the productions (new feeds made live are kept there)
+RUN useradd --create-home gantry && mkdir -p data/productions && chown -R gantry data/productions
+USER gantry
 ENV GANTRY_STATIC=/app/frontend/dist \
-    PYTHONUNBUFFERED=1
+    PYTHONUNBUFFERED=1 \
+    UV_NO_CACHE=1
 EXPOSE 8000
-CMD ["uv", "run", "--no-sync", "uvicorn", "gantry.server:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uv", "run", "--no-sync", "uvicorn", "gantry.server:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers", "--forwarded-allow-ips", "*"]
