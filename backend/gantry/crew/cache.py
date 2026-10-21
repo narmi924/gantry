@@ -10,12 +10,13 @@ The rundown is saved to disk so it survives a restart.
 from __future__ import annotations
 
 import json
+import os
 import threading
 from pathlib import Path
 
 from ..sim.store import DATA_DIR
 
-CACHE_DIR = DATA_DIR.parent / "productions"
+CACHE_DIR = Path(os.environ.get("GANTRY_PRODUCTIONS", DATA_DIR.parent / "productions"))
 
 
 class Production:
