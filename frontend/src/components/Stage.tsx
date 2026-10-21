@@ -2,26 +2,30 @@ import { useEffect, useRef, useState } from 'react'
 import type { FeedSnapshot, MatchFeed } from '../feed'
 import { Broadcast3D, type ViewSpec } from '../three/broadcast3d'
 import type { CameraMode } from '../three/cameras'
+import { readActions } from '../three/actions'
 import { Labels } from '../three/labels'
 import { L } from '../three/world'
-import { FEEDS, type Cue, type FeedId, type FeedReport, type Player, type ReelLine, type ReplayAngle } from '../types'
+import { t } from '../i18n'
+import { AUDIENCE_LABEL, audienceOf, FOLLOWS, languageOf, type Audience, type Cue, type FeedId, type FeedReport, type Player, type ReelLine, type ReplayAngle } from '../types'
 import { QuestionCard } from './AskBox'
 import { GoalCard, PeriodCard, ScoreBug } from './Graphics'
+import { MetricBadge } from './MetricBadge'
 import { OnAir } from './OnAir'
 import { ReportCard } from './ReportCard'
 import { StatsPanel } from './StatsPanel'
 
 export type Layout = 'single' | 'wall'
 
-/** How each broadcast is filmed by default. */
-const FEED_CAMERA: Record<FeedId, { mode: CameraMode; analyst: boolean }> = {
-  casual_en: { mode: 'broadcast', analyst: false },
-  analyst_en: { mode: 'broadcast', analyst: true },
-  home_zh: { mode: 'follow', analyst: false },
-  audio_en: { mode: 'broadcast', analyst: false },
+/** How each audience's broadcast is filmed by default. */
+const CAMERA: Record<Audience, { mode: CameraMode; analyst: boolean }> = {
+  casual: { mode: 'broadcast', analyst: false },
+  analyst: { mode: 'broadcast', analyst: true },
+  home: { mode: 'follow', analyst: false },
+  audio: { mode: 'broadcast', analyst: false },
 }
 
-const FOLLOWED: Partial<Record<FeedId, string>> = { home_zh: 'KSM-10' }
+/** The moment a cue belongs to: its id ends with the moment's kind and tick, e.g. "r-casual_en-goal-17585". */
+const momentOf = (id: string) => id.split('-').slice(-2).join('-')
 
 interface Segment {
   from: number
@@ -40,6 +44,10 @@ interface Playback {
   segments: Segment[]
   index: number
   startedAt: number | null
+  /** wall time before which it may not start (the whistle call goes first) */
+  notBefore?: number
+  /** the moment a replay belongs to, e.g. "goal-17585" */
+  moment?: string
   requested: boolean
   reports?: Record<string, FeedReport>
   resume?: boolean
@@ -51,6 +59,7 @@ interface Props {
   feed: MatchFeed
   snap: FeedSnapshot
   layout: Layout
+  feeds: FeedId[]
   selected: FeedId
   onSelect: (f: FeedId) => void
   sound: boolean
@@ -58,7 +67,7 @@ interface Props {
   showStats: boolean
 }
 
-export function Stage({ feed, snap, layout, selected, onSelect, sound, tactical, showStats }: Props) {
+export function Stage({ feed, snap, layout, feeds: allFeeds, selected, onSelect, sound, tactical, showStats }: Props) {
   const glRef = useRef<HTMLCanvasElement>(null)
   const tagRef = useRef<HTMLCanvasElement>(null)
   const tileRefs = useRef(new Map<FeedId, HTMLDivElement>())
@@ -66,29 +75,60 @@ export function Stage({ feed, snap, layout, selected, onSelect, sound, tactical,
   const replay = useRef<Playback | null>(null)
   const [replaying, setReplaying] = useState<null | 'replay' | 'reel'>(null)
   const [reports, setReports] = useState<Record<string, FeedReport> | null>(null)
-  // at the half-time whistle the picture holds for the editor's package
-  const halfTimeHold = useRef<{ tick: number; timer: number } | null>(null)
+  const [whistleCard, setWhistleCard] = useState<string | null>(null)
+  // at a whistle the picture holds: the call goes out first, then the editor's package and the report
+  const whistleHold = useRef<{ tick: number; type: string; callEnds: number; timer: number } | null>(null)
   const handledWhistle = useRef(-1)
 
   useEffect(() => {
     const last = snap.events[snap.events.length - 1]
-    if (!last || last.type !== 'half_time' || last.tick === handledWhistle.current) return
+    if (!last || !['half_time', 'full_time'].includes(last.type) || last.tick <= handledWhistle.current) return
     handledWhistle.current = last.tick
-    if (snap.speed > 1.25 || !snap.playing) return
-    feed.setPlaying(false)
-    const timer = window.setTimeout(() => {
-      // no package came: carry on with the second half
-      if (halfTimeHold.current) {
-        halfTimeHold.current = null
-        feed.setPlaying(true)
-      }
-    }, 35000)
-    halfTimeHold.current = { tick: last.tick, timer }
+    if (snap.speed > 1.25) return
+    const half = last.type === 'half_time'
+    if (half && snap.playing) feed.setPlaying(false)
+    // the whistle calls are booked a moment after the whistle; with the picture held, they go on air now
+    let longest = 0
+    feed.releaseEarly((c) => {
+      const call = c.kind === 'line' && c.moment === last.type && c.tick <= last.tick + 60
+      if (call) longest = Math.max(longest, c.seconds ?? 3)
+      return call
+    })
+    const timer = half
+      ? window.setTimeout(() => {
+          // no package came: carry on with the second half
+          if (whistleHold.current) {
+            whistleHold.current = null
+            feed.setPlaying(true)
+          }
+        }, 35000)
+      : 0
+    whistleHold.current = { tick: last.tick, type: last.type, callEnds: performance.now() + longest * 1000 + 700, timer }
   }, [snap.events, snap.speed, snap.playing, feed])
   const props = useRef({ snap, layout, selected, tactical })
   props.current = { snap, layout, selected, tactical }
 
-  const feeds: FeedId[] = layout === 'wall' ? FEEDS.map((f) => f.id) : [selected]
+  const feeds: FeedId[] = layout === 'wall' ? allFeeds : [selected]
+  const wallFeeds = useRef(allFeeds)
+  wallFeeds.current = allFeeds
+
+  // before kick-off the picture waits while each feed opens the broadcast
+  const openTimer = useRef(0)
+  useEffect(() => {
+    return feed.onCue((c: Cue) => {
+      if (c.kind !== 'line' || c.moment !== 'open') return
+      if (feed.snapshot.speed > 1.25 || feed.renderTick > 40) return
+      let longest = c.seconds ?? 8
+      feed.releaseEarly((x) => {
+        const open = x.kind !== 'reel' && x.moment === 'open'
+        if (open && x.kind === 'line') longest = Math.max(longest, x.seconds ?? 8)
+        return open
+      })
+      feed.setPlaying(false)
+      window.clearTimeout(openTimer.current)
+      openTimer.current = window.setTimeout(() => feed.setPlaying(true), longest * 1000 + 900)
+    })
+  }, [feed])
 
   // the director calls replays, the editor calls highlights; every feed goes together, each from its own angle
   useEffect(() => {
@@ -97,15 +137,26 @@ export function Stage({ feed, snap, layout, selected, onSelect, sound, tactical,
       if (c.kind === 'reel' && c.reel && c.reel.clips.length) {
         const reel = c.reel
         const half = reel.when === 'half_time'
-        const held = halfTimeHold.current
-        if (held) {
-          window.clearTimeout(held.timer)
-          halfTimeHold.current = null
-        }
+        // the package belongs to the whistle at the end of its half: that whistle mustn't hold the picture again
+        const end = feed.snapshot.meta?.periods.find((p) => Math.abs(p.end_tick - 1 - c.tick) <= 3)?.end_tick
+        handledWhistle.current = Math.max(handledWhistle.current, end !== undefined ? end - 1 : c.tick + 1)
+        const held = whistleHold.current
+        if (held) window.clearTimeout(held.timer)
+        whistleHold.current = null
+        // the whistle call goes out first, then the package
+        let longest = 0
+        feed.releaseEarly((x) => {
+          const call = x.kind === 'line' && x.moment === reel.when && x.tick <= c.tick + 60
+          if (call) longest = Math.max(longest, x.seconds ?? 3)
+          return call
+        })
+        const callEnds = Math.max(held?.callEnds ?? 0, performance.now() + longest * 1000 + 700)
+        setWhistleCard(reel.when)
         const resume = half && (held !== null || feed.snapshot.playing)
         if (half) feed.setPlaying(false) // the half-time show
         replay.current = {
           key: c.tick, kind: 'reel', index: 0, startedAt: null, requested: false, reports: reel.reports, resume, when: reel.when,
+          notBefore: callEnds,
           segments: reel.clips.map((clip) => {
             const natural = (clip.to - clip.from) / 10
             const longest = Math.max(0, ...Object.values(clip.lines).map((l) => l.seconds))
@@ -122,14 +173,21 @@ export function Stage({ feed, snap, layout, selected, onSelect, sound, tactical,
       const r = c.replay
       const cur = replay.current
       if (cur?.kind === 'reel') return
+      const moment = momentOf(c.id)
+      const seg = { from: r.from, to: r.to, speed: r.speed, focus: r.focus, team: r.team, angles: new Map([[c.feed as FeedId, r.angle]]) }
       if (cur && cur.key === c.tick) {
         cur.segments[0].angles.set(c.feed as FeedId, r.angle)
         return
       }
-      replay.current = {
-        key: c.tick, kind: 'replay', index: 0, startedAt: null, requested: false,
-        segments: [{ from: r.from, to: r.to, speed: r.speed, focus: r.focus, team: r.team, angles: new Map([[c.feed as FeedId, r.angle]]) }],
+      // a goal's second angle follows straight on from the first, with no live picture in between
+      if (c.id.startsWith('r2-') && cur && cur.moment === moment) {
+        if (cur.segments[1]) cur.segments[1].angles.set(c.feed as FeedId, r.angle)
+        else cur.segments.push(seg)
+        if (cur.requested) feed.requestClip(seg.from, seg.to)
+        return
       }
+      replay.current = { key: c.tick, kind: 'replay', moment, index: 0, startedAt: null, requested: false, segments: [seg] }
+      feed.releaseEarly((x) => x.kind === 'replay' && x.id.startsWith('r2-') && momentOf(x.id) === moment)
     })
     return () => {
       off()
@@ -187,11 +245,12 @@ export function Stage({ feed, snap, layout, selected, onSelect, sound, tactical,
           pb.askedAt = now
           feed.requestClip(r.from, r.to)
         }
-        if (pb.startedAt === null && feed.hasFrames(r.from, r.to)) {
+        if (pb.startedAt === null && feed.hasFrames(r.from, r.to) && now >= (pb.notBefore ?? 0)) {
           pb.startedAt = now
+          if (pb.kind === 'reel' && pb.index === 0) setWhistleCard(null)
           // each feed's narration for this clip goes on air as the clip starts
           for (const [feedId, line] of Object.entries(r.lines ?? {})) {
-            feed.inject({ id: `reel-${pb.key}-${pb.index}-${feedId}`, feed: feedId, tick: feed.renderTick, kind: 'line', moment: 'highlights', text: line.text, audio: line.audio, seconds: line.seconds, source: 'ai' })
+            feed.inject({ id: `reel-${pb.key}-${pb.index}-${feedId}`, feed: feedId, tick: feed.renderTick, kind: 'line', moment: 'highlights', text: line.text, audio: line.audio, seconds: line.seconds, interrupt: true, source: 'ai' })
           }
         }
         if (pb.startedAt !== null) {
@@ -232,13 +291,14 @@ export function Stage({ feed, snap, layout, selected, onSelect, sound, tactical,
 
       // one camera per broadcast on screen, each in its tile
       const origin = gl.getBoundingClientRect()
-      const ids: FeedId[] = lay === 'wall' ? FEEDS.map((f) => f.id) : [sel]
+      const ids: FeedId[] = lay === 'wall' ? wallFeeds.current : [sel]
       const focusSlot = r?.focus ? s.lineup.indexOf(r.focus) : -1
       const specs: ViewSpec[] = ids.map((id) => {
         const el = tileRefs.current.get(id)
         const rect = el?.getBoundingClientRect()
-        const cam = FEED_CAMERA[id]
-        const followId = FOLLOWED[id]
+        const cam = CAMERA[audienceOf(id)]
+        const info = props.current.snap.feeds.find((f) => f.id === id)
+        const followId = info?.custom ? info.follow ?? undefined : FOLLOWS[audienceOf(id)]
         const angle = inReplay ? r!.angles.get(id) ?? 'high' : null
         return {
           id,
@@ -267,6 +327,7 @@ export function Stage({ feed, snap, layout, selected, onSelect, sound, tactical,
       v.frame(sample, {
         teams: meta.teams, lineup, events,
         goal: goal && sample ? { team: goal.team ?? 0, age: (sample.tick - goal.tick) / 10 } : null,
+        actions: sample ? readActions(sample.tick, (k) => feed.sampleAt(k), [0, 11]) : undefined,
       }, dt, now)
       ctx.clearRect(0, 0, tags.width, tags.height)
       for (const vw of v.views) {
@@ -289,9 +350,12 @@ export function Stage({ feed, snap, layout, selected, onSelect, sound, tactical,
     <div className={`stage stage-${layout}`}>
       <canvas ref={glRef} className="stage-canvas" />
       <canvas ref={tagRef} className="stage-canvas stage-tags" />
-      <div className={layout === 'wall' ? 'wall' : 'single'}>
+      <div className={layout === 'wall' ? `wall ${feeds.length > 4 ? 'wall-6' : ''}` : 'single'}>
         {feeds.map((id) => {
-          const info = FEEDS.find((f) => f.id === id)!
+          const info = snap.feeds.find((f) => f.id === id)
+          const label = info?.name ?? AUDIENCE_LABEL[audienceOf(id)]
+          const lang = languageOf(id)
+          const audio = audienceOf(id) === 'audio'
           const listening = id === selected
           return (
             <div
@@ -300,29 +364,30 @@ export function Stage({ feed, snap, layout, selected, onSelect, sound, tactical,
                 if (el) tileRefs.current.set(id, el)
                 else tileRefs.current.delete(id)
               }}
-              className={`tile ${id === 'audio_en' ? 'tile-audio' : ''} ${layout === 'wall' && listening ? 'tile-listening' : ''}`}
+              className={`tile ${audio ? 'tile-audio' : ''} ${layout === 'wall' && listening ? 'tile-listening' : ''}`}
               onClick={layout === 'wall' ? () => onSelect(id) : undefined}
             >
-              {id === 'audio_en' && <div className="audio-veil" aria-hidden />}
+              {audio && <div className="audio-veil" aria-hidden />}
               {replaying && <div className="wipe" key={`wipe-${replaying}-${replay.current?.index ?? 0}`} aria-hidden />}
-              <div className="safe">
+              <div className="safe" lang={lang} dir={info?.rtl ? 'rtl' : undefined}>
                 <ScoreBug snap={snap} />
-                <span className="feedtag">
-                  {layout === 'wall' ? info.label : `Your feed: ${info.label}`}
+                <span className="feedtag" lang="en" dir="ltr">
+                  {layout === 'wall' ? label : `Your feed: ${label}`}
                   {layout === 'wall' && listening && sound && <b className="listening"> · listening</b>}
                 </span>
-                {replaying && <span className="replay-bug">{replaying === 'reel' ? 'Highlights' : 'Replay'}</span>}
-                {reports?.[id] && snap.meta && <ReportCard report={reports[id]} meta={snap.meta} zh={id === 'home_zh'} score={snap.score} />}
-                <QuestionCard snap={snap} feedId={id} />
-                <GoalCard snap={snap} />
-                {replaying !== 'reel' && !reports && <PeriodCard snap={snap} />}
-                {layout === 'single' && showStats && <StatsPanel snap={snap} />}
+                {replaying && <span className="replay-bug">{t(lang, replaying === 'reel' ? 'highlights' : 'replay')}</span>}
+                {reports?.[id] && snap.meta && <ReportCard report={reports[id]} snap={snap} lang={lang} />}
+                <QuestionCard snap={snap} feedId={id} lang={lang} />
+                {info?.metric && <MetricBadge snap={snap} info={info} lang={lang} />}
+                <GoalCard snap={snap} lang={lang} />
+                {replaying !== 'reel' && !reports && <PeriodCard snap={snap} lang={lang} whistle={whistleCard} />}
+                {layout === 'single' && showStats && <StatsPanel snap={snap} lang={lang} />}
                 <OnAir
                   feed={feed}
                   snap={snap}
                   selected={id}
                   sound={sound && listening}
-                  onPictureGraphic={id === 'analyst_en' ? (c) => showSpace(c.graphic?.seconds ?? 9) : undefined}
+                  onPictureGraphic={audienceOf(id) === 'analyst' ? (c) => showSpace(c.graphic?.seconds ?? 9) : undefined}
                 />
               </div>
             </div>

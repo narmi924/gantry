@@ -1,6 +1,6 @@
 import type { FeedSnapshot, MatchFeed } from '../feed'
 import type { Layout } from './Stage'
-import { FEEDS, type FeedId } from '../types'
+import { AUDIENCE_LABEL, audienceOf, type FeedId } from '../types'
 
 const SPEEDS = [1, 2, 4, 8, 16]
 
@@ -10,18 +10,20 @@ interface Props {
   tactical: boolean
   onTactical: (v: boolean) => void
   layout: Layout
+  feeds: FeedId[]
   showStats: boolean
   onStats: (v: boolean) => void
   selected: FeedId
   onSelect: (f: FeedId) => void
   sound: boolean
   onSound: (v: boolean) => void
+  onBuild: () => void
 }
 
-export function Controls({ feed, snap, tactical, onTactical, layout, showStats, onStats, selected, onSelect, sound, onSound }: Props) {
+export function Controls({ feed, snap, tactical, onTactical, layout, feeds, showStats, onStats, selected, onSelect, sound, onSound, onBuild }: Props) {
   const meta = snap.meta
   const total = meta?.frames ?? 1
-  const goals = snap.events.filter((e) => e.type === 'goal')
+  const chapters = snap.chapters
 
   const seekFromPointer = (e: React.PointerEvent<HTMLDivElement>) => {
     const r = e.currentTarget.getBoundingClientRect()
@@ -32,12 +34,13 @@ export function Controls({ feed, snap, tactical, onTactical, layout, showStats, 
   return (
     <>
     <div className="feeds" role="group" aria-label="Choose your broadcast">
-      {FEEDS.map((f, i) => (
-        <button key={f.id} className="feed-btn" aria-pressed={selected === f.id} onClick={() => onSelect(f.id)}>
+      {feeds.map((id, i) => (
+        <button key={id} className="feed-btn" aria-pressed={selected === id} onClick={() => onSelect(id)}>
           <span className="feed-key">{i + 1}</span>
-          {f.label}
+          {snap.feeds.find((f) => f.id === id)?.name ?? AUDIENCE_LABEL[audienceOf(id)]}
         </button>
       ))}
+      <button className="build-btn" onClick={onBuild}>Build your feed</button>
       <button className="toggle sound" aria-pressed={sound} onClick={() => onSound(!sound)}>
         {sound ? 'Commentary on' : 'Turn on commentary'}
       </button>
@@ -70,9 +73,9 @@ export function Controls({ feed, snap, tactical, onTactical, layout, showStats, 
             style={{ left: `${(p.start_tick / total) * 100}%`, width: `${((p.end_tick - p.start_tick) / total) * 100}%` }} />
         ))}
         <div className="timeline-played" style={{ width: `${(snap.tick / total) * 100}%` }} />
-        {goals.map((g) => (
-          <span key={g.id} className="timeline-goal" title="Goal"
-            style={{ left: `${(g.tick / total) * 100}%`, background: meta?.teams[g.team ?? 0].colors.shirt }} />
+        {chapters.filter((c) => c.kind !== 'kickoff').map((c) => (
+          <span key={c.label} className={`timeline-mark timeline-${c.kind}`} title={c.label}
+            style={{ left: `${(c.tick / total) * 100}%`, background: c.kind === 'goal' ? meta?.teams[c.team ?? 0].colors.shirt : undefined }} />
         ))}
         <span className="timeline-head" style={{ left: `${(snap.tick / total) * 100}%` }} />
       </div>
@@ -89,6 +92,16 @@ export function Controls({ feed, snap, tactical, onTactical, layout, showStats, 
         </>
       )}
     </div>
+    {chapters.length > 0 && (
+      <div className="chapters" role="group" aria-label="Jump to a moment">
+        {chapters.map((c) => (
+          <button key={c.label} className="chapter" onClick={() => feed.seek(c.tick)}>
+            {c.kind === 'goal' && <i style={{ background: meta?.teams[c.team ?? 0].colors.shirt }} />}
+            {c.label}
+          </button>
+        ))}
+      </div>
+    )}
     </>
   )
 }

@@ -1,16 +1,22 @@
 import { useEffect, useRef, useState } from 'react'
 import type { FeedSnapshot, MatchFeed } from '../feed'
-import { FEEDS, type FeedId } from '../types'
+import { t } from '../i18n'
+import { AUDIENCE_LABEL, audienceOf, type Audience, type FeedId } from '../types'
 
-const PROMPT: Record<FeedId, string> = {
-  casual_en: 'Ask your broadcast, e.g. “Why are Kingsmere on top?”',
-  analyst_en: 'Ask the analyst, e.g. “How did the first goal come about?”',
-  home_zh: '问问你的转播，比如“Aldana 今天跑了多少？”',
-  audio_en: 'Ask a question about the match, or press V and speak',
+/** Questions a first-time viewer can ask with one click, per audience. */
+const SUGGEST: Record<Audience, string[]> = {
+  casual: ['Why are Kingsmere on top?', 'Who has been the best player so far?'],
+  analyst: ['How did the first goal come about?', 'Which team is pressing better?'],
+  home: ['How is Aldana playing today?', 'How far has Aldana run?'],
+  audio: ['Where is the ball right now?', 'What is the score, and who is on top?'],
 }
 
-/** The language each feed listens in when a viewer speaks a question. */
-const LISTEN: Record<FeedId, string> = { casual_en: 'en-GB', analyst_en: 'en-US', home_zh: 'zh-CN', audio_en: 'en-GB' }
+const PROMPT: Record<Audience, string> = {
+  casual: 'Ask your broadcast, e.g. “Why are Kingsmere on top?”',
+  analyst: 'Ask the analyst, e.g. “How did the first goal come about?”',
+  home: 'Ask about Aldana, e.g. “How far has he run today?”',
+  audio: 'Ask a question about the match, or press V and speak',
+}
 
 /** Where a viewer asks their own broadcast a question, by typing or by voice. */
 export function AskBox({ feed, snap, selected }: { feed: MatchFeed; snap: FeedSnapshot; selected: FeedId }) {
@@ -18,7 +24,12 @@ export function AskBox({ feed, snap, selected }: { feed: MatchFeed; snap: FeedSn
   const [listening, setListening] = useState(false)
   const [problem, setProblem] = useState<string | null>(null)
   const busy = snap.asking !== null
-  const label = FEEDS.find((f) => f.id === selected)?.label
+  const info = snap.feeds.find((f) => f.id === selected)
+  const label = info?.name ?? AUDIENCE_LABEL[audienceOf(selected)]
+  // a viewer's own feed asks about the player they follow
+  const followed = info?.custom && info.follow ? snap.meta?.teams.flatMap((t) => t.players).find((p) => p.id === info.follow) : undefined
+  const prompt = followed ? `Ask about ${followed.last}, e.g. “How fast has he been today?”` : PROMPT[audienceOf(selected)]
+  const suggestions = followed ? [`How is ${followed.last} playing today?`, `What is ${followed.last}'s top speed?`] : SUGGEST[audienceOf(selected)]
   const listenRef = useRef<() => void>(() => {})
 
   const submit = (e: React.FormEvent) => {
@@ -35,19 +46,20 @@ export function AskBox({ feed, snap, selected }: { feed: MatchFeed; snap: FeedSn
     setProblem(null)
     setListening(true)
     try {
-      const res = await fetch('/api/speech-token')
+      const res = await fetch(`/api/speech-token?ticket=${encodeURIComponent(snap.ticket ?? '')}`)
       if (!res.ok) throw new Error('token')
       const { token, region } = await res.json()
       const sdk = await import('microsoft-cognitiveservices-speech-sdk')
       const cfg = sdk.SpeechConfig.fromAuthorizationToken(token, region)
-      cfg.speechRecognitionLanguage = LISTEN[selected]
+      // the feed listens in its own language
+      cfg.speechRecognitionLanguage = info?.locale ?? 'en-GB'
       const rec = new sdk.SpeechRecognizer(cfg, sdk.AudioConfig.fromDefaultMicrophoneInput())
       rec.recognizing = (_s, e) => setText(e.result.text)
       rec.recognizeOnceAsync(
         (r) => {
           rec.close()
           setListening(false)
-          const q = r.text?.trim().replace(/[。.]$/, '')
+          const q = r.text?.trim().replace(/[.\u3002]$/, '')
           if (q) {
             setText('')
             feed.ask(selected, q)
@@ -77,14 +89,15 @@ export function AskBox({ feed, snap, selected }: { feed: MatchFeed; snap: FeedSn
   }, [])
 
   return (
+    <>
     <form className="ask" onSubmit={submit}>
       <label className="ask-label" htmlFor="ask-input">Ask {label}</label>
       <input
         id="ask-input"
-        className={`ask-input ${selected === 'home_zh' ? 'ask-zh' : ''}`}
+        className="ask-input"
         value={text}
         onChange={(e) => setText(e.target.value)}
-        placeholder={listening ? (selected === 'home_zh' ? '请说…' : 'Listening…') : PROMPT[selected]}
+        placeholder={listening ? 'Listening…' : prompt}
         autoComplete="off"
       />
       {problem && <span className="ask-problem" role="status">{problem}</span>}
@@ -98,18 +111,23 @@ export function AskBox({ feed, snap, selected }: { feed: MatchFeed; snap: FeedSn
         {busy ? 'The crew is on it…' : 'Ask'}
       </button>
     </form>
+    <div className="suggest" role="group" aria-label="Suggested questions">
+      {suggestions.map((q) => (
+        <button key={q} type="button" disabled={busy} onClick={() => feed.ask(selected, q)}>{q}</button>
+      ))}
+    </div>
+    </>
   )
 }
 
 /** On the picture: the question being answered, so the replay and the voice make sense. */
-export function QuestionCard({ snap, feedId }: { snap: FeedSnapshot; feedId: FeedId }) {
+export function QuestionCard({ snap, feedId, lang }: { snap: FeedSnapshot; feedId: FeedId; lang: string }) {
   const recent = snap.answer?.feed === feedId && performance.now() - snap.answer.at < 20000
   const q = snap.asking?.feed === feedId ? snap.asking.question : recent ? snap.answer!.question : null
   if (!q) return null
-  const zh = feedId === 'home_zh'
   return (
-    <div className={`qcard ${zh ? 'qcard-zh' : ''}`} key={q}>
-      <span className="qcard-label">{zh ? '你的问题' : 'You asked'}</span>
+    <div className="qcard" key={q}>
+      <span className="qcard-label">{t(lang, 'you_asked')}</span>
       <span className="qcard-text">{q}</span>
     </div>
   )
