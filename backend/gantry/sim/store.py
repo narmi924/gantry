@@ -55,6 +55,9 @@ class StoredMatch:
         self.meta = json.loads((root / "meta.json").read_text(encoding="utf-8"))
         self.events = json.loads((root / "events.json").read_text(encoding="utf-8"))
         self.frames = np.load(root / "frames.npy")
+        # the fictional season around this match, if one was made (gantry.sim.season)
+        season = root / "season.json"
+        self.season = json.loads(season.read_text(encoding="utf-8")) if season.exists() else None
 
     def lineup_at(self, tick: int) -> list[str]:
         lineup = self.meta["teams"][0]["starters"] + self.meta["teams"][1]["starters"]

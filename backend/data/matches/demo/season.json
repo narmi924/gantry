@@ -1,0 +1,500 @@
+{
+ "league": "a fictional league of 20 clubs",
+ "matchday": 10,
+ "table": [
+  {
+   "club": "Carrowmere",
+   "code": "CAR",
+   "played": 9,
+   "won": 7,
+   "drawn": 0,
+   "lost": 2,
+   "for": 13,
+   "against": 9,
+   "points": 21,
+   "position": 1
+  },
+  {
+   "club": "Halverton",
+   "code": "HAL",
+   "played": 9,
+   "won": 6,
+   "drawn": 2,
+   "lost": 1,
+   "for": 14,
+   "against": 8,
+   "points": 20,
+   "position": 2
+  },
+  {
+   "club": "Kingsmere FC",
+   "code": "KSM",
+   "played": 9,
+   "won": 6,
+   "drawn": 2,
+   "lost": 1,
+   "for": 14,
+   "against": 9,
+   "points": 20,
+   "position": 3
+  },
+  {
+   "club": "Larkspur City",
+   "code": "LKC",
+   "played": 9,
+   "won": 6,
+   "drawn": 1,
+   "lost": 2,
+   "for": 17,
+   "against": 8,
+   "points": 19,
+   "position": 4
+  },
+  {
+   "club": "Brackwater FC",
+   "code": "BRK",
+   "played": 9,
+   "won": 5,
+   "drawn": 1,
+   "lost": 3,
+   "for": 12,
+   "against": 6,
+   "points": 16,
+   "position": 5
+  },
+  {
+   "club": "Hollowfield Town",
+   "code": "HOL",
+   "played": 9,
+   "won": 4,
+   "drawn": 3,
+   "lost": 2,
+   "for": 15,
+   "against": 13,
+   "points": 15,
+   "position": 6
+  },
+  {
+   "club": "Selwyn Park",
+   "code": "SEL",
+   "played": 9,
+   "won": 5,
+   "drawn": 0,
+   "lost": 4,
+   "for": 13,
+   "against": 11,
+   "points": 15,
+   "position": 7
+  },
+  {
+   "club": "Pellingham",
+   "code": "PEL",
+   "played": 9,
+   "won": 5,
+   "drawn": 0,
+   "lost": 4,
+   "for": 13,
+   "against": 15,
+   "points": 15,
+   "position": 8
+  },
+  {
+   "club": "Duncairn Rovers",
+   "code": "DUN",
+   "played": 9,
+   "won": 4,
+   "drawn": 2,
+   "lost": 3,
+   "for": 12,
+   "against": 13,
+   "points": 14,
+   "position": 9
+  },
+  {
+   "club": "Bellmont Forge",
+   "code": "BEL",
+   "played": 9,
+   "won": 4,
+   "drawn": 1,
+   "lost": 4,
+   "for": 14,
+   "against": 13,
+   "points": 13,
+   "position": 10
+  },
+  {
+   "club": "Cedarbrook United",
+   "code": "CED",
+   "played": 9,
+   "won": 3,
+   "drawn": 2,
+   "lost": 4,
+   "for": 14,
+   "against": 13,
+   "points": 11,
+   "position": 11
+  },
+  {
+   "club": "Northcliffe United",
+   "code": "NCU",
+   "played": 9,
+   "won": 3,
+   "drawn": 2,
+   "lost": 4,
+   "for": 15,
+   "against": 17,
+   "points": 11,
+   "position": 12
+  },
+  {
+   "club": "Kestrel Vale",
+   "code": "KES",
+   "played": 9,
+   "won": 2,
+   "drawn": 4,
+   "lost": 3,
+   "for": 15,
+   "against": 13,
+   "points": 10,
+   "position": 13
+  },
+  {
+   "club": "Marlowe Bay",
+   "code": "MAR",
+   "played": 9,
+   "won": 3,
+   "drawn": 1,
+   "lost": 5,
+   "for": 10,
+   "against": 11,
+   "points": 10,
+   "position": 14
+  },
+  {
+   "club": "Thornfield City",
+   "code": "THO",
+   "played": 9,
+   "won": 2,
+   "drawn": 4,
+   "lost": 3,
+   "for": 6,
+   "against": 7,
+   "points": 10,
+   "position": 15
+  },
+  {
+   "club": "Greymoor Athletic",
+   "code": "GRA",
+   "played": 9,
+   "won": 2,
+   "drawn": 3,
+   "lost": 4,
+   "for": 9,
+   "against": 13,
+   "points": 9,
+   "position": 16
+  },
+  {
+   "club": "Oakhurst Town",
+   "code": "OAK",
+   "played": 9,
+   "won": 2,
+   "drawn": 3,
+   "lost": 4,
+   "for": 11,
+   "against": 16,
+   "points": 9,
+   "position": 17
+  },
+  {
+   "club": "Ashvale Athletic",
+   "code": "ASH",
+   "played": 9,
+   "won": 2,
+   "drawn": 1,
+   "lost": 6,
+   "for": 10,
+   "against": 14,
+   "points": 7,
+   "position": 18
+  },
+  {
+   "club": "Westmarch United",
+   "code": "WMU",
+   "played": 9,
+   "won": 1,
+   "drawn": 2,
+   "lost": 6,
+   "for": 4,
+   "against": 14,
+   "points": 5,
+   "position": 19
+  },
+  {
+   "club": "Wexcombe City",
+   "code": "WEX",
+   "played": 9,
+   "won": 0,
+   "drawn": 2,
+   "lost": 7,
+   "for": 6,
+   "against": 14,
+   "points": 2,
+   "position": 20
+  }
+ ],
+ "form": {
+  "KSM": "WWDWD",
+  "ASH": "WLLWL",
+  "BRK": "WWLWW",
+  "SEL": "WLWLL",
+  "NCU": "DWLLW",
+  "GRA": "DLWDL",
+  "LKC": "DWWWW",
+  "DUN": "DLWDW",
+  "HOL": "LWWWD",
+  "WMU": "LDLLW",
+  "CAR": "LWWWW",
+  "OAK": "WDWLD",
+  "BEL": "LWDLL",
+  "HAL": "DWDWL",
+  "KES": "DLDLD",
+  "PEL": "LLLWL",
+  "WEX": "DLLLL",
+  "THO": "DDWDW",
+  "MAR": "WLLLL",
+  "CED": "LDLDW"
+ },
+ "players": {
+  "KSM-1": {
+   "appearances": 7,
+   "goals": 0,
+   "assists": 0,
+   "club_appearances": 149,
+   "club_goals": 0
+  },
+  "KSM-2": {
+   "appearances": 9,
+   "goals": 0,
+   "assists": 0,
+   "club_appearances": 119,
+   "club_goals": 1
+  },
+  "KSM-5": {
+   "appearances": 7,
+   "goals": 0,
+   "assists": 1,
+   "club_appearances": 114,
+   "club_goals": 0
+  },
+  "KSM-6": {
+   "appearances": 7,
+   "goals": 1,
+   "assists": 0,
+   "club_appearances": 152,
+   "club_goals": 3
+  },
+  "KSM-3": {
+   "appearances": 8,
+   "goals": 0,
+   "assists": 1,
+   "club_appearances": 81,
+   "club_goals": 1
+  },
+  "KSM-4": {
+   "appearances": 7,
+   "goals": 1,
+   "assists": 1,
+   "club_appearances": 136,
+   "club_goals": 3
+  },
+  "KSM-8": {
+   "appearances": 9,
+   "goals": 1,
+   "assists": 2,
+   "club_appearances": 49,
+   "club_goals": 5
+  },
+  "KSM-10": {
+   "appearances": 8,
+   "goals": 1,
+   "assists": 0,
+   "club_appearances": 63,
+   "club_goals": 49
+  },
+  "KSM-7": {
+   "appearances": 8,
+   "goals": 0,
+   "assists": 2,
+   "club_appearances": 134,
+   "club_goals": 16
+  },
+  "KSM-9": {
+   "appearances": 8,
+   "goals": 5,
+   "assists": 0,
+   "club_appearances": 104,
+   "club_goals": 23
+  },
+  "KSM-11": {
+   "appearances": 9,
+   "goals": 2,
+   "assists": 1,
+   "club_appearances": 110,
+   "club_goals": 6
+  },
+  "KSM-12": {
+   "appearances": 2,
+   "goals": 0,
+   "assists": 0,
+   "club_appearances": 39,
+   "club_goals": 0
+  },
+  "KSM-14": {
+   "appearances": 4,
+   "goals": 0,
+   "assists": 0,
+   "club_appearances": 161,
+   "club_goals": 6
+  },
+  "KSM-17": {
+   "appearances": 4,
+   "goals": 0,
+   "assists": 1,
+   "club_appearances": 93,
+   "club_goals": 2
+  },
+  "KSM-19": {
+   "appearances": 6,
+   "goals": 0,
+   "assists": 0,
+   "club_appearances": 99,
+   "club_goals": 24
+  },
+  "KSM-22": {
+   "appearances": 4,
+   "goals": 0,
+   "assists": 0,
+   "club_appearances": 40,
+   "club_goals": 16
+  },
+  "ASH-1": {
+   "appearances": 9,
+   "goals": 0,
+   "assists": 0,
+   "club_appearances": 83,
+   "club_goals": 0
+  },
+  "ASH-2": {
+   "appearances": 8,
+   "goals": 0,
+   "assists": 0,
+   "club_appearances": 118,
+   "club_goals": 2
+  },
+  "ASH-4": {
+   "appearances": 9,
+   "goals": 0,
+   "assists": 0,
+   "club_appearances": 39,
+   "club_goals": 1
+  },
+  "ASH-5": {
+   "appearances": 9,
+   "goals": 0,
+   "assists": 0,
+   "club_appearances": 94,
+   "club_goals": 1
+  },
+  "ASH-3": {
+   "appearances": 7,
+   "goals": 0,
+   "assists": 0,
+   "club_appearances": 164,
+   "club_goals": 1
+  },
+  "ASH-6": {
+   "appearances": 9,
+   "goals": 0,
+   "assists": 1,
+   "club_appearances": 161,
+   "club_goals": 2
+  },
+  "ASH-8": {
+   "appearances": 9,
+   "goals": 0,
+   "assists": 2,
+   "club_appearances": 72,
+   "club_goals": 2
+  },
+  "ASH-7": {
+   "appearances": 7,
+   "goals": 1,
+   "assists": 0,
+   "club_appearances": 31,
+   "club_goals": 6
+  },
+  "ASH-10": {
+   "appearances": 9,
+   "goals": 2,
+   "assists": 1,
+   "club_appearances": 30,
+   "club_goals": 6
+  },
+  "ASH-11": {
+   "appearances": 7,
+   "goals": 0,
+   "assists": 1,
+   "club_appearances": 165,
+   "club_goals": 11
+  },
+  "ASH-9": {
+   "appearances": 9,
+   "goals": 4,
+   "assists": 1,
+   "club_appearances": 92,
+   "club_goals": 7
+  },
+  "ASH-13": {
+   "appearances": 1,
+   "goals": 0,
+   "assists": 0,
+   "club_appearances": 104,
+   "club_goals": 0
+  },
+  "ASH-15": {
+   "appearances": 3,
+   "goals": 0,
+   "assists": 0,
+   "club_appearances": 74,
+   "club_goals": 1
+  },
+  "ASH-18": {
+   "appearances": 1,
+   "goals": 0,
+   "assists": 0,
+   "club_appearances": 157,
+   "club_goals": 4
+  },
+  "ASH-20": {
+   "appearances": 1,
+   "goals": 2,
+   "assists": 1,
+   "club_appearances": 39,
+   "club_goals": 11
+  },
+  "ASH-23": {
+   "appearances": 3,
+   "goals": 1,
+   "assists": 0,
+   "club_appearances": 23,
+   "club_goals": 9
+  }
+ },
+ "last_meeting": {
+  "season": "last season",
+  "venue": "Ashvale Athletic",
+  "score": "Ashvale Athletic 2-1 Kingsmere FC",
+  "winner": "ASH"
+ }
+}
