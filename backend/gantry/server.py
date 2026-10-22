@@ -24,7 +24,7 @@ from fastapi.staticfiles import StaticFiles
 from starlette.websockets import WebSocketState
 
 from .crew.ask import ask
-from .crew.cache import Production, audio_from_disk
+from .crew.cache import CACHE_DIR, Production, audio_from_disk
 from .crew.crew import DELAY_TICKS, Crew
 from .crew.feeds import DEFAULT_FEEDS, LANGUAGES, feed, friendly, native_names
 from .crew.session import CrewSession
@@ -174,8 +174,20 @@ def match_stats(match_id: str, tick: int):
 
 
 def produced_cues(match_id: str, feeds: list[str]) -> list[dict]:
-    prod = Production.of(f"{match_id}-{'+'.join(sorted(feeds))}")
-    cues = [c for item in prod.items.values() for c in item["cues"]]
+    """Every produced cue for these feeds, from whichever production made each feed (the default broadcast, or a
+    viewer's own feed produced on its own)."""
+    wanted, cues, seen = set(feeds), [], set()
+    if CACHE_DIR.exists():
+        for d in sorted(CACHE_DIR.iterdir()):
+            if not d.is_dir() or not d.name.startswith(f"{match_id}-"):
+                continue
+            if not wanted & set(d.name[len(match_id) + 1:].split("+")):
+                continue
+            for item in Production.of(d.name).items.values():
+                for c in item["cues"]:
+                    if c.get("feed") in wanted and c["id"] not in seen:
+                        seen.add(c["id"])
+                        cues.append(c)
     return sorted(cues, key=lambda c: (c["tick"], c["feed"], c["kind"]))
 
 
@@ -204,7 +216,7 @@ def captions(match_id: str, feed_id: str):
     """One feed's commentary as WebVTT captions, timed to the match video."""
     if feed(feed_id) is None:
         raise HTTPException(404, f"No feed called {feed_id}")
-    lines = [c for c in produced_cues(match_id, list(DEFAULT_FEEDS)) if c["feed"] == feed_id and c["kind"] == "line"]
+    lines = [c for c in produced_cues(match_id, [feed_id]) if c["kind"] == "line"]
     out = ["WEBVTT", ""]
     for i, c in enumerate(lines, 1):
         start = c["tick"]

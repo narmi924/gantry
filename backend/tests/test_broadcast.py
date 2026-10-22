@@ -104,3 +104,24 @@ def test_the_production_calls_every_goal_on_the_moment(desk):
         calls = [c for c in rundown[m.id]["cues"] if c["kind"] == "line" and c["id"].endswith("-call")]
         assert {c["feed"] for c in calls} == set(DEFAULT_FEEDS), m.id
         assert all(0 <= c["tick"] - m.tick <= 10 for c in calls), m.id
+
+
+@pytest.mark.skipif(not PRODUCTION.exists(), reason="the match hasn't been produced on this machine")
+def test_the_rundown_and_captions_serve_any_produced_feed():
+    from gantry.server import captions, rundown
+
+    cues = rundown("demo", "casual_en,analyst_en")["cues"]
+    assert cues and {c["feed"] for c in cues} == {"casual_en", "analyst_en"}
+    vtt = captions("demo", "audio_en").body.decode("utf-8")
+    assert vtt.startswith("WEBVTT") and "-->" in vtt
+
+
+def test_questions_over_mcp_have_a_ceiling(monkeypatch):
+    from gantry import guard as g
+
+    monkeypatch.setattr(g, "PUBLIC", True)
+    monkeypatch.setattr(g, "MCP_QUESTIONS_PER_HOUR", 10)
+    gate = g.Guard()
+    per_address = g.QUESTIONS_PER_IP[0]
+    assert sum(gate.may_ask_over_mcp("10.0.0.1") for _ in range(per_address + 3)) == per_address
+    assert sum(gate.may_ask_over_mcp(f"10.0.1.{i}") for i in range(20)) == 10 - per_address

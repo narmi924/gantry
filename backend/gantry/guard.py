@@ -20,6 +20,7 @@ MAX_LIVE_SESSIONS = int(os.environ.get("GANTRY_MAX_LIVE", "2"))
 MAX_CONNECTIONS_PER_IP = int(os.environ.get("GANTRY_MAX_CONNECTIONS", "4"))
 QUESTIONS_PER_IP = (8, 600)          # questions, per this many seconds
 LIVE_MOMENTS_PER_HOUR = int(os.environ.get("GANTRY_LIVE_PER_HOUR", "2500"))
+MCP_QUESTIONS_PER_HOUR = int(os.environ.get("GANTRY_MCP_QUESTIONS_PER_HOUR", "60"))   # across every MCP client
 
 
 class Guard:
@@ -29,6 +30,7 @@ class Guard:
         self.questions: dict[str, deque] = defaultdict(deque)
         self.live_moments: deque = deque()
         self.tickets: dict[str, float] = {}
+        self.mcp_questions: deque = deque()
 
     # ------------------------------------------------------------ connections
 
@@ -64,6 +66,19 @@ class Guard:
         if len(q) >= n:
             return False
         q.append(now)
+        return True
+
+    def may_ask_over_mcp(self, ip: str) -> bool:
+        """A question to the crew from an MCP client: the same allowance per address as a viewer, and a ceiling
+        across every client for the hour, since MCP needs no page and no connection."""
+        if not PUBLIC:
+            return True
+        now = time.monotonic()
+        while self.mcp_questions and now - self.mcp_questions[0] > 3600:
+            self.mcp_questions.popleft()
+        if len(self.mcp_questions) >= MCP_QUESTIONS_PER_HOUR or not self.may_ask(f"mcp:{ip}"):
+            return False
+        self.mcp_questions.append(now)
         return True
 
     def may_produce(self) -> bool:

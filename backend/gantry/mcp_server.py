@@ -13,11 +13,11 @@ import asyncio
 import os
 import re
 
-from mcp.server.fastmcp import FastMCP
+from mcp.server.fastmcp import Context, FastMCP
 from mcp.server.transport_security import TransportSecuritySettings
 
 from .crew.desk import StatsDesk
-from .crew.feeds import DEFAULT_FEEDS, feed
+from .crew.feeds import feed
 
 MATCH = "demo"
 
@@ -109,7 +109,7 @@ def what_the_crew_said(feed_id: str = "analyst_en", from_minute: str | None = "0
         return [{"error": f"No feed called {feed_id}"}]
     a, b = tick_at(from_minute), tick_at(to_minute)
     d = desk()
-    lines = [c for c in produced_cues(MATCH, list(DEFAULT_FEEDS)) if c["feed"] == feed_id and c["kind"] == "line"]
+    lines = [c for c in produced_cues(MATCH, [feed_id]) if c["kind"] == "line"]
     return [{"minute": d.minute(c["tick"]), "said": c["text"]} for c in lines if a <= c["tick"] <= b][:80]
 
 
@@ -128,15 +128,32 @@ class _Viewer:
 
 
 ASKING = asyncio.Semaphore(2)
+MAX_QUESTION = 300
+
+
+def _caller(ctx: Context | None) -> str:
+    """The client's address, as the server sees it behind the Container Apps ingress."""
+    try:
+        req = ctx.request_context.request
+        forwarded = req.headers.get("x-forwarded-for")
+        return forwarded.split(",")[0].strip() if forwarded else (req.client.host if req.client else "?")
+    except Exception:
+        return "?"
 
 
 @server.tool()
-async def ask_the_crew(question: str, minute: str | None = None, feed_id: str = "analyst_en") -> str:
+async def ask_the_crew(question: str, minute: str | None = None, feed_id: str = "analyst_en", ctx: Context | None = None) -> str:
     """Ask Gantry's production crew a question about the match, as of a minute. The producer agent looks it up with the stats desk's tools and answers in that feed's voice."""
     from .crew.ask import Answer, producer
     from .crew.roles import MODEL_TIMEOUT, opts
+    from .guard import guard
     from .server import crew, load
 
+    question = (question or "").strip()[:MAX_QUESTION]
+    if not question:
+        return "Ask a question about the match."
+    if not guard.may_ask_over_mcp(_caller(ctx)):
+        return "That's a lot of questions. Ask again in a few minutes."
     if os.environ.get("GANTRY_PUBLIC") == "1" and ASKING.locked():
         return "The crew is busy with other questions. Try again in a moment."
     f = feed(feed_id) or feed("analyst_en")
