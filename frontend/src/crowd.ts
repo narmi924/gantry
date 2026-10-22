@@ -108,7 +108,8 @@ export function useCrowd(events: MatchEvent[], enabled: boolean) {
     if (last < seen.current - 50) seen.current = last // the viewer jumped back in the match
     if (enabled && crowd.current) {
       for (const e of events) {
-        if (e.tick <= seen.current) continue
+        // after a reconnect the whole match so far arrives at once: only what just happened gets a reaction
+        if (e.tick <= seen.current || e.tick < last - 30) continue
         crowd.current.react(e)
         // a log of crowd reactions, used when exporting a clip with sound
         const w = window as unknown as { __gantryCrowd?: unknown[] }

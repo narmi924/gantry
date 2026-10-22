@@ -4,6 +4,7 @@ import { OutputPass } from 'three/examples/jsm/postprocessing/OutputPass.js'
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js'
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js'
 import type { MatchEvent, Player, Sample, Team } from '../types'
+import type { Action } from './actions'
 import { CameraDirector, type CameraMode } from './cameras'
 import { PlayerRig } from './players'
 import { ReplayLayer } from './replay'
@@ -17,6 +18,8 @@ export interface FrameInfo {
   events: MatchEvent[]
   /** team that scored most recently, and how many match seconds ago */
   goal: { team: number; age: number } | null
+  /** kicks and dives read from the tracking data around this moment, by slot */
+  actions?: Map<number, Action>
 }
 
 /** One camera of the broadcast, drawn into its own part of the canvas. */
@@ -188,7 +191,7 @@ export class Broadcast3D {
       const player = info.lineup[k]
       const rig = this.rigs[k]
       if (player) rig.dress(player, info.teams[k < 11 ? 0 : 1], k === 0 || k === 11)
-      rig.update(s.players[k * 2], s.players[k * 2 + 1], s.tick, bx, by, dt)
+      rig.update(s.players[k * 2], s.players[k * 2 + 1], s.tick, bx, by, dt, info.actions?.get(k))
     }
     const pos = toWorld(bx, by, bz + 0.11)
     if (this.prevBall) {

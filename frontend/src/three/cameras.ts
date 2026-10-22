@@ -121,13 +121,20 @@ export class CameraDirector {
     const by = this.ry.x
     const dir = this.goalX > L / 2 ? 1 : -1
     if (this.mode === 'behind_goal') {
-      return { pos: toWorld(this.goalX + dir * 15, W / 2 + (by - W / 2) * 0.35, 6.5), target: toWorld(bx, by, 0.6), width: 30 }
+      // in the gap between the net and the end stand (which starts 8 m back), so no supporter stands in shot
+      // once the ball reaches the goal, the camera holds on the goalmouth rather than turning to follow it into the net
+      const tx = dir > 0 ? Math.min(bx, this.goalX - 5) : Math.max(bx, this.goalX + 5)
+      return { pos: toWorld(this.goalX + dir * 6, W / 2 + (by - W / 2) * 0.3, 4.2), target: toWorld(tx, by, 0.6), width: 30 }
     }
     if (this.mode === 'reverse') {
       // a pitch-side camera behind the far touchline, tracking along with play
       return { pos: toWorld(Math.min(L - 8, Math.max(8, bx)), W + 6.5, 6), target: toWorld(bx, by, 0.8), width: 34 }
     }
-    return { pos: toWorld(bx - dir * 14, by - 26, 34), target: toWorld(bx + dir * 6, by, 0), width: 48 }
+    // high and wide: the ball and the goal it is heading for, both in the frame
+    const tx = bx + (this.goalX - bx) * 0.35
+    const ty = by + (W / 2 - by) * 0.3
+    const width = Math.min(75, Math.max(40, Math.abs(this.goalX - bx) * 0.9 + 20))
+    return { pos: toWorld(tx - dir * 10, ty - 30, 36), target: toWorld(tx, ty, 0), width }
   }
 
   private tactical(): Shot {

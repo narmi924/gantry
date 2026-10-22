@@ -590,7 +590,6 @@ class Engine:
         team = int(self.team[c])
         A = self.ball.copy()
         g = self.opp_goal(team)
-        opp_out = self.outfield(1 - team)
         press_d = float(np.min(np.linalg.norm(self.pos[self.idx(1 - team)] - A, axis=1)))
         header = kind == "header"
         xg = self.xg(A, team, press_d, header=header)

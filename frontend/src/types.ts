@@ -102,6 +102,7 @@ export interface Cue {
   audio?: string | null
   seconds?: number | null
   excited?: boolean
+  interrupt?: boolean
   graphic?: { type: string; seconds: number; player?: string; profile?: Record<string, unknown> } | null
   replay?: ReplayCall | null
   reel?: Reel | null
@@ -157,11 +158,46 @@ export interface TalkItem {
   moment?: string | null
 }
 
-export const FEEDS = [
-  { id: 'casual_en', label: 'New fan', lang: 'en' },
-  { id: 'analyst_en', label: 'Analyst', lang: 'en' },
-  { id: 'home_zh', label: '中文 · No.10', lang: 'zh' },
-  { id: 'audio_en', label: 'Audio described', lang: 'en' },
-] as const
+/** A feed is one audience in one language, e.g. "home_en" or "analyst_es". */
+export type FeedId = string
+export type Audience = 'casual' | 'analyst' | 'home' | 'audio'
 
-export type FeedId = (typeof FEEDS)[number]['id']
+export interface FeedInfo {
+  id: FeedId
+  name: string
+  audience: Audience
+  label: string
+  language: string
+  language_name: string
+  locale: string
+  rtl: boolean
+  follow?: string | null
+  club?: number | null
+  metric?: string | null
+  custom?: boolean
+}
+
+export const DEFAULT_FEEDS: FeedId[] = ['casual_en', 'analyst_en', 'home_en', 'audio_en']
+
+export const AUDIENCE_LABEL: Record<Audience, string> = {
+  casual: 'New fan',
+  analyst: 'Analyst',
+  home: 'Following No. 10',
+  audio: 'Audio described',
+}
+
+export const audienceOf = (id: FeedId) => (id.split('_')[0] || 'casual') as Audience
+export const languageOf = (id: FeedId) => (id.split('_')[1] || 'en').split('.')[0]
+
+/** A feed id the server understands: an audience in a language, optionally with a club, a player and a number. */
+export const FEED_ID = /^(casual|analyst|home|audio)_(en|es|pt|fr|ar|hi|id|zh)(\.(KSM|ASH|-)\.((KSM|ASH)-\d+|-)\.(speed|distance|passing|shots|-))?$/
+
+export interface Chapter {
+  label: string
+  tick: number
+  kind: 'kickoff' | 'goal' | 'half_time' | 'full_time'
+  team?: number
+}
+
+/** The player each audience's camera follows, if any. */
+export const FOLLOWS: Partial<Record<Audience, string>> = { home: 'KSM-10' }

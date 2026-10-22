@@ -1,4 +1,5 @@
-import type { Cue, MatchEvent, Meta, Sample, StatsSnapshot, TalkItem } from './types'
+import type { NameSheet } from './i18n'
+import type { Chapter, Cue, FeedInfo, MatchEvent, Meta, Sample, StatsSnapshot, TalkItem } from './types'
 
 // Columns in a streamed frame row: tick, then the stored match columns.
 const C_TICK = 0
@@ -27,6 +28,11 @@ export interface FeedSnapshot {
   talkback: TalkItem[]
   asking: { feed: string; question: string } | null
   answer: { feed: string; question: string; answer: string; at: number } | null
+  feeds: FeedInfo[]
+  names: NameSheet
+  chapters: Chapter[]
+  /** lets this viewer ask for a speech token, for questions by voice */
+  ticket: string | null
 }
 
 /**
@@ -43,7 +49,7 @@ export class MatchFeed {
   private snap: FeedSnapshot = {
     connected: false, meta: null, speed: 1, playing: true,
     score: [0, 0], lineup: [], events: [], tick: 0, clock: 0, period: 1, stats: null,
-    cues: [], talkback: [], asking: null, answer: null,
+    cues: [], talkback: [], asking: null, answer: null, feeds: [], names: {}, chapters: [], ticket: null,
   }
   private pendingCues: Cue[] = []
   /** stretches of the match kept in memory for replays, however old */
@@ -61,15 +67,21 @@ export class MatchFeed {
     return period.start_tick + (clock - period.start_clock) * meta.hz
   }
 
-  constructor(matchId: string, feeds: string[] = []) {
+  /** where to pick up when this feed replaces another (a viewer added their own broadcast) */
+  private resumeAt: number | null
+
+  constructor(matchId: string, feeds: string[] = [], resumeAt: number | null = null) {
     this.matchId = matchId
     this.feeds = feeds
+    this.resumeAt = resumeAt
   }
 
   /** Called with each cue the moment the picture reaches it. */
   onCue(fn: (c: Cue) => void) {
     this.cueListeners.add(fn)
-    return () => this.cueListeners.delete(fn)
+    return () => {
+      this.cueListeners.delete(fn)
+    }
   }
 
   /** Cues already received but not yet on air (for preloading audio). */
@@ -84,6 +96,7 @@ export class MatchFeed {
     this.ws = ws
     ws.onopen = () => this.update({ connected: true })
     ws.onclose = () => {
+      if (this.film) ((window as unknown as { __gantryCues?: unknown[] }).__gantryCues ??= []).push({ t: performance.now(), id: 'CLOSED', at: this.renderTick })
       if (this.ws !== ws) return
       this.update({ connected: false })
       setTimeout(() => this.ws === ws && this.connect(), 1500)
@@ -111,13 +124,20 @@ export class MatchFeed {
     this.listeners.forEach((fn) => fn())
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private onMessage(msg: any) {
     if (msg.type === 'hello') {
-      this.update({ meta: msg.meta })
+      this.update({ meta: msg.meta, feeds: msg.feeds ?? [], names: msg.names ?? {}, chapters: msg.chapters ?? [], ticket: msg.ticket ?? null })
+      if (this.started) {
+        // a reconnect: carry on from where the viewer was, at the same speed
+        this.seek(this.renderTick)
+        this.send({ type: 'control', speed: this.snap.speed, playing: this.snap.playing })
+        return
+      }
       // ?t=<tick> or ?minute=<n> opens the match at a given moment
       const q = new URLSearchParams(location.search)
-      const start = q.has('t') ? Number(q.get('t')) : q.has('minute') ? this.tickForMinute(msg.meta, Number(q.get('minute'))) : null
-      if (start !== null && Number.isFinite(start) && !this.started) this.seek(start)
+      const start = this.resumeAt ?? (q.has('t') ? Number(q.get('t')) : q.has('minute') ? this.tickForMinute(msg.meta, Number(q.get('minute'))) : null)
+      if (start !== null && Number.isFinite(start)) this.seek(start)
       this.started = true
       if (q.has('speed')) this.setSpeed(Number(q.get('speed')))
     } else if (msg.type === 'state') {
@@ -138,6 +158,10 @@ export class MatchFeed {
     } else if (msg.type === 'clip') {
       for (const row of msg.frames as number[][]) this.frames.set(row[C_TICK], row)
     } else if (msg.type === 'cues') {
+      if (this.film) {
+        const w = window as unknown as { __gantryCues?: unknown[] }
+        for (const c of msg.cues as Cue[]) (w.__gantryCues ??= []).push({ t: performance.now(), id: c.id, tick: c.tick, kind: c.kind, at: this.renderTick })
+      }
       this.pendingCues.push(...(msg.cues as Cue[]))
       this.pendingCues.sort((a, b) => a.tick - b.tick)
     } else if (msg.type === 'answer') {
@@ -172,10 +196,23 @@ export class MatchFeed {
     this.cueListeners.forEach((fn) => fn(c))
   }
 
+  /** Put on air now any cues waiting that match, without waiting for the picture (used while the picture holds at a whistle). */
+  releaseEarly(match: (c: Cue) => boolean) {
+    const now = this.pendingCues.filter(match)
+    if (!now.length) return
+    this.pendingCues = this.pendingCues.filter((c) => !match(c))
+    this.update({ cues: [...this.snap.cues, ...now].slice(-60) })
+    for (const c of now) this.cueListeners.forEach((fn) => fn(c))
+  }
+
   /** Ask the crew a question on one feed. The answer arrives as cues, like everything else. */
   ask(feedId: string, question: string) {
     this.send({ type: 'ask', feed: feedId, question })
     this.update({ asking: { feed: feedId, question }, answer: null })
+    // if no answer comes back, let the viewer ask again
+    window.setTimeout(() => {
+      if (this.snap.asking?.question === question) this.update({ asking: null })
+    }, 25000)
   }
 
   /** Ask the server for a stretch of the match the viewer has already passed. */
@@ -198,9 +235,23 @@ export class MatchFeed {
   }
 
   /** Move the playhead forward by `dtMs` of wall time. */
+  /** filming: the picture moves exactly with the recording's clock, and tells the server how far it has got */
+  readonly film = new URLSearchParams(location.search).has('film')
+  private filmSent = -1
+
   advance(dtMs: number) {
     if (this.latest < 0) return
     const { speed, playing } = this.snap
+    if (this.film) {
+      if (playing) this.renderTick = Math.min(this.renderTick + (dtMs / 100) * speed, this.latest)
+      ;(window as unknown as { __gantryFilmTick?: number }).__gantryFilmTick = this.renderTick
+      if (Math.abs(this.renderTick - this.filmSent) >= 5) {
+        this.filmSent = this.renderTick
+        this.send({ type: 'film', tick: Math.round(this.renderTick) })
+      }
+      this.release()
+      return
+    }
     if (playing) this.renderTick += (dtMs / 100) * speed
     // stay a little behind the newest frame so there is always one to blend towards
     const target = this.latest - 1.5 * Math.max(1, speed)

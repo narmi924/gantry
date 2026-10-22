@@ -1,6 +1,7 @@
 import * as THREE from 'three'
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js'
 import type { Player, Team } from '../types'
+import type { Action } from './actions'
 import { hashString, toWorld } from './world'
 
 const SKIN = ['#f3cfb0', '#e3b28c', '#c99169', '#ad7149', '#8c5536', '#6e4129', '#52301f']
@@ -169,7 +170,7 @@ export class PlayerRig {
    * Place and animate the figure. `tick` is match time in tenths of a second, so
    * strides stay in step with the play at any playback speed.
    */
-  update(x: number, y: number, tick: number, ballX: number, ballY: number, dt: number) {
+  update(x: number, y: number, tick: number, ballX: number, ballY: number, dt: number, action?: Action) {
     toWorld(x, y, 0, this.group.position)
     let moved = 0
     if (this.last && tick > this.last.tick) {
@@ -205,6 +206,43 @@ export class PlayerRig {
     this.arms[1].lower.rotation.x = elbow
     this.spine.rotation.x = 0.03 + 0.018 * sp
     this.pelvis.position.y = 0.92 + 0.04 * Math.abs(s) * run - 0.03 * Math.min(1, sp / 7)
+    this.group.rotation.z = 0
+    this.arms[0].upper.rotation.z = 0.12
+    this.arms[1].upper.rotation.z = -0.12
+    if (action) this.act(action, tick, x, y, ballX, ballY)
+  }
+
+  /** A strike of the ball, or a goalkeeper's dive, laid over the run. */
+  private act(a: Action, tick: number, x: number, y: number, ballX: number, ballY: number) {
+    const u = (tick - a.at) / 4 // -1 .. 1 around the contact
+    if (u < -1.6 || u > 2.2) return
+    if (a.kind === 'kick') {
+      // back-swing, strike, follow-through: the kicking leg swings from behind the body to in front of it
+      const hip = u < 0 ? 0.85 * Math.min(1, (u + 1.6) / 1.2) : 0.85 - 2.1 * Math.min(1, u / 0.5)
+      const recover = u > 0.8 ? Math.min(1, (u - 0.8) / 1.4) : 0
+      const leg = this.legs[0]
+      leg.upper.rotation.x = hip * (1 - recover)
+      leg.lower.rotation.x = (u < 0 ? 1.25 : 0.15) * (1 - recover) + 0.06
+      this.legs[1].upper.rotation.x = 0.1
+      this.legs[1].lower.rotation.x = 0.18
+      // arms out for balance, the body leaning back over the ball
+      this.arms[0].upper.rotation.z = 0.7 * (1 - recover)
+      this.arms[1].upper.rotation.z = -0.7 * (1 - recover)
+      this.spine.rotation.x = -0.12 * (1 - recover)
+      return
+    }
+    // a dive: the keeper lays out towards the ball, arms reaching
+    const reach = u < 0 ? Math.max(0, 1 + u / 0.75) : u < 1.2 ? 1 : Math.max(0, 1 - (u - 1.2))
+    const across = Math.cos(this.yaw) * (ballX - x) + Math.sin(this.yaw) * (ballY - y)
+    const side = across === 0 ? a.side : Math.sign(across)
+    this.group.rotation.z = -side * 1.25 * reach
+    this.pelvis.position.y = 0.92 + 0.35 * reach
+    for (const arm of this.arms) {
+      arm.upper.rotation.x = -2.6 * reach
+      arm.lower.rotation.x = -0.2 * reach
+    }
+    this.legs[0].upper.rotation.x = 0.3 * reach
+    this.legs[1].upper.rotation.x = -0.25 * reach
   }
 
   private turnTo(target: number, rate: number) {

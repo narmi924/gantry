@@ -1,10 +1,16 @@
-import { useEffect, useMemo, useSyncExternalStore } from 'react'
+import { useEffect, useMemo, useRef, useSyncExternalStore } from 'react'
 import { MatchFeed } from './feed'
 
 export function useFeed(matchId: string, feeds: string[] = []) {
   const key = feeds.join(',')
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  const feed = useMemo(() => new MatchFeed(matchId, feeds), [matchId, key])
+  const previous = useRef<MatchFeed | null>(null)
+  // a new set of feeds is a new connection; it picks up where the old one was
+  const feed = useMemo(() => {
+    const resume = previous.current ? Math.round(previous.current.renderTick) : null
+    return new MatchFeed(matchId, feeds, resume)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [matchId, key])
+  previous.current = feed
   useEffect(() => {
     feed.connect()
     return () => feed.close()
