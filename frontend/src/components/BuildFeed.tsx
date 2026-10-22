@@ -31,6 +31,13 @@ export function BuildFeed({ meta, onBuild, onClose }: { meta: Meta; onBuild: (fe
   const id = `${style}_${lang}.${clubFor}.${player}.${metric}`
   const players = meta.teams.flatMap((t) => t.players.map((p) => ({ ...p, club: t.short })))
   const followed = players.find((p) => p.id === player)
+  // a supporter always has a club: "No side" only exists for a new fan
+  const pickStyle = (next: Style) => {
+    setStyle(next)
+    if (next === 'home' && club === '-') {
+      setClub(meta.teams.find((t) => t.players.some((p) => p.id === player))?.code ?? meta.teams[0].code)
+    }
+  }
 
   return (
     <div className="build" role="dialog" aria-modal="true" aria-labelledby="build-title">
@@ -51,7 +58,7 @@ export function BuildFeed({ meta, onBuild, onClose }: { meta: Meta; onBuild: (fe
           <legend>Who is it for</legend>
           {STYLES.map((s) => (
             <label key={s.id} className={`build-style ${style === s.id ? 'on' : ''}`}>
-              <input type="radio" name="style" value={s.id} checked={style === s.id} onChange={() => setStyle(s.id)} />
+              <input type="radio" name="style" value={s.id} checked={style === s.id} onChange={() => pickStyle(s.id)} />
               <b>{s.name}</b>
               <span>{s.note}</span>
             </label>
