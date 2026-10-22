@@ -184,7 +184,14 @@ cd backend && uv sync && uv run uvicorn gantry.server:app --port 8000
 cd frontend && npm install && npx vite            # open http://localhost:5173
 ```
 
-With nothing else set up, the produced broadcast plays from `backend/data/productions` (a release asset).
+The produced broadcast (every line, voice and package the crew made for the demo match) is a release asset, not in
+the repository. With it unpacked into `backend/data/productions`, the broadcast plays with nothing else set up:
+
+```bash
+gh release download --repo narmi924/gantry --pattern gantry-demo-production.zip
+unzip gantry-demo-production.zip -d backend/data/productions
+```
+
 To run the crew live (questions, your own feed, new languages) you also need the Azure CLI and a Microsoft
 Foundry project with `gpt-5.4-mini` and `gpt-5-mini` deployments:
 
