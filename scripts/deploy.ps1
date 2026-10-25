@@ -33,12 +33,10 @@ if (-not (Test-Path $production)) {
 # 3. build the image in the registry, with the produced broadcast inside it. The build log isn't streamed here:
 #    on Windows az crashes printing it when its output goes to a file or a pipe.
 $acr = $registry.Split(".")[0]
-$run = az acr build -r $acr -t "gantry:$Tag" --no-wait --query runId -o tsv .
-do {
-  Start-Sleep 10
-  $status = az acr task show-run -r $acr --run-id $run --query status -o tsv
-} while ($status -in "Queued", "Started", "Running")
-if ($status -ne "Succeeded") { throw "The image build ended $status. Its log: az acr task logs -r $acr --run-id $run" }
+$build = az acr build -r $acr -t "gantry:$Tag" --no-logs --query "{id: runId, status: status}" -o json . | ConvertFrom-Json
+if ($build.status -ne "Succeeded") {
+  throw "The image build ended $($build.status). Its log: az acr task logs -r $acr --run-id $($build.id)"
+}
 
 # 4. run the app on it
 $out = az deployment group create -g $ResourceGroup -f infra/main.bicep -p foundryName=$Foundry projectName=$Project `
