@@ -308,8 +308,10 @@ async def _stream(ws: WebSocket, match_id: str, ip: str):
         return
 
     total = len(match.frames)
+    # a reconnect, or a feed added mid-match, opens where the viewer is rather than at kick-off
+    start = int(np.clip(number(ws.query_params.get("from"), 0), 0, total - 1))
     # film: when a recording drives the page frame by frame, the clock never runs more than 4 s ahead of its picture
-    state = {"head": 0.0, "speed": 1.0, "playing": True, "sent": 0, "film": None}
+    state = {"head": float(start), "speed": 1.0, "playing": True, "sent": start, "film": None}
     lock = asyncio.Lock()
 
     async def send(msg: dict):
@@ -335,6 +337,8 @@ async def _stream(ws: WebSocket, match_id: str, ip: str):
         else:
             s.live = guard.start_live()
             live_count += s.live
+        if start:
+            s.seek(start)
         sessions.append(s)
     ticket = guard.ticket()
 
@@ -358,7 +362,7 @@ async def _stream(ws: WebSocket, match_id: str, ip: str):
     await send({"type": "hello", "meta": match.meta, "feeds": [feed_info(f, match.meta) for f in feeds], "names": names,
                 "chapters": chapters(match), "delay_ticks": DELAY_TICKS, "ticket": ticket,
                 "live": {f: owner(f).live for f in feeds}})
-    await send_state(0)
+    await send_state(start)
 
     async def receive():
         while True:

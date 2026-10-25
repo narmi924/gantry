@@ -78,12 +78,19 @@ def test_feed_ids(fid, ok):
     assert (feed(fid) is not None) == ok
 
 
-def test_the_picture_streams_and_seeks():
+@pytest.fixture(scope="module")
+def client():
+    # the MCP server inside the app starts once per process, so the stream tests share one client
     from fastapi.testclient import TestClient
 
     from gantry.server import app
 
-    with TestClient(app) as client, client.websocket_connect("/ws/matches/demo") as ws:
+    with TestClient(app) as c:
+        yield c
+
+
+def test_the_picture_streams_and_seeks(client):
+    with client.websocket_connect("/ws/matches/demo") as ws:
         assert json.loads(ws.receive_text())["type"] == "hello"
         assert json.loads(ws.receive_text())["type"] == "state"
         ws.send_text(json.dumps({"type": "seek", "tick": 17000}))
@@ -95,6 +102,18 @@ def test_the_picture_streams_and_seeks():
             if len(ticks) >= 3:
                 break
         assert ticks and ticks[-1] >= 17000 and ticks == sorted(ticks)
+
+
+def test_a_reconnect_carries_on_where_the_viewer_was(client):
+    with client.websocket_connect("/ws/matches/demo?from=17000") as ws:
+        assert json.loads(ws.receive_text())["type"] == "hello"
+        assert json.loads(ws.receive_text())["tick"] == 17000
+        for _ in range(10):
+            msg = json.loads(ws.receive_text())
+            if msg["type"] == "frames" and msg["frames"]:
+                assert msg["frames"][0][0] >= 17000
+                break
+            assert msg["type"] != "cues" or all(c["tick"] >= 17000 for c in msg["cues"])
 
 
 @pytest.mark.skipif(not PRODUCTION.exists(), reason="the match hasn't been produced on this machine")

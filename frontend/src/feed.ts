@@ -57,6 +57,9 @@ export class MatchFeed {
   private cueListeners = new Set<(c: Cue) => void>()
   private feeds: string[]
   private pendingStats: StatsSnapshot[] = []
+  /** jumps asked of this connection and not yet answered: until they are, what arrives is from the old position */
+  private seeking = 0
+  private greeted = false
   renderTick = 0
   private matchId: string
   private started = false
@@ -91,9 +94,15 @@ export class MatchFeed {
 
   connect() {
     const proto = location.protocol === 'https:' ? 'wss' : 'ws'
-    const feeds = this.feeds.length ? `?feeds=${this.feeds.join(',')}` : ''
-    const ws = new WebSocket(`${proto}://${location.host}/ws/matches/${this.matchId}${feeds}`)
+    const q = new URLSearchParams()
+    if (this.feeds.length) q.set('feeds', this.feeds.join(','))
+    // a reconnect, or a feed added mid-match, opens where the viewer is rather than at kick-off
+    const from = this.started ? Math.round(this.renderTick) : this.resumeAt
+    if (from) q.set('from', String(from))
+    const ws = new WebSocket(`${proto}://${location.host}/ws/matches/${this.matchId}${q.toString() ? `?${q}` : ''}`)
     this.ws = ws
+    this.seeking = 0
+    this.greeted = false
     ws.onopen = () => this.update({ connected: true })
     ws.onclose = () => {
       if (this.film) ((window as unknown as { __gantryCues?: unknown[] }).__gantryCues ??= []).push({ t: performance.now(), id: 'CLOSED', at: this.renderTick })
@@ -129,18 +138,21 @@ export class MatchFeed {
     if (msg.type === 'hello') {
       this.update({ meta: msg.meta, feeds: msg.feeds ?? [], names: msg.names ?? {}, chapters: msg.chapters ?? [], ticket: msg.ticket ?? null })
       if (this.started) {
-        // a reconnect: carry on from where the viewer was, at the same speed
-        this.seek(this.renderTick)
+        // a reconnect: the stream already opens where the viewer was; carry on at the same speed
         this.send({ type: 'control', speed: this.snap.speed, playing: this.snap.playing })
         return
       }
       // ?t=<tick> or ?minute=<n> opens the match at a given moment
       const q = new URLSearchParams(location.search)
-      const start = this.resumeAt ?? (q.has('t') ? Number(q.get('t')) : q.has('minute') ? this.tickForMinute(msg.meta, Number(q.get('minute'))) : null)
+      const start = this.resumeAt !== null ? null : q.has('t') ? Number(q.get('t')) : q.has('minute') ? this.tickForMinute(msg.meta, Number(q.get('minute'))) : null
       if (start !== null && Number.isFinite(start)) this.seek(start)
       this.started = true
       if (q.has('speed')) this.setSpeed(Number(q.get('speed')))
     } else if (msg.type === 'state') {
+      // the first state comes with the connection; each one after it answers a jump, in order
+      if (!this.greeted) this.greeted = true
+      else this.seeking = Math.max(0, this.seeking - 1)
+      if (this.seeking) return
       this.frames.clear()
       this.latest = msg.tick - 1
       this.renderTick = msg.tick
@@ -148,6 +160,8 @@ export class MatchFeed {
       this.pendingStats = []
       this.pendingCues = []
       this.update({ score: msg.score, lineup: msg.lineup, events: msg.events, tick: msg.tick, stats: msg.stats ?? null, cues: [] })
+    } else if (this.seeking && (msg.type === 'frames' || msg.type === 'cues' || msg.type === 'talkback')) {
+      return
     } else if (msg.type === 'frames') {
       for (const row of msg.frames as number[][]) {
         this.frames.set(row[C_TICK], row)
@@ -231,6 +245,8 @@ export class MatchFeed {
   }
 
   seek(tick: number) {
+    if (this.ws?.readyState !== WebSocket.OPEN) return
+    this.seeking += 1
     this.send({ type: 'seek', tick: Math.round(tick) })
   }
 
