@@ -10,14 +10,15 @@ the picture as a machine-readable rundown. The crew is built with **Microsoft Ag
 
 ![The gallery: four broadcasts of the same goal, each with its own replay angle, and the crew's talkback](docs/gallery.jpg)
 
-> Live demo and two-minute video: links are added at submission.
+**[Watch the video](https://youtu.be/vPupkhUmb2c)** (under two minutes) or **[try the live demo](https://gantry.salmondune-004c8a8a.eastus2.azurecontainerapps.io)**.
 
 ---
 
 ## Try it in two minutes
 
-1. Open the demo and press **Watch the first goal, with sound**. The gallery opens a few seconds before
-   Nico Aldana's goal. All four broadcasts call it at the same moment, then each shows its own replays.
+1. Open the [demo](https://gantry.salmondune-004c8a8a.eastus2.azurecontainerapps.io) and press
+   **Watch the first goal, with sound**. The gallery opens a few seconds before Nico Aldana's goal. All four
+   broadcasts call it at the same moment, then each shows its own replays.
 2. Click any monitor to hear it. Put headphones on for **Audio described**: the voice moves left and right
    with the ball.
 3. **Ask your broadcast**: type a question, press **V** and speak, or click a suggested question.
@@ -51,14 +52,7 @@ language's own script. The page around it stays in English.
 The crew is organised like a real broadcast team. Each role is an executor in a Microsoft Agent Framework
 workflow, and the feeds are written in parallel, each by its own agent:
 
-```mermaid
-flowchart LR
-  desk["Stats desk"] --> director["Director"]
-  director --> c1["Commentator: New fan"] --> v1["Voice"]
-  director --> c2["Commentator: Analyst"] --> v2["Voice"]
-  director --> c3["Commentator: Following No. 10"] --> v3["Voice"]
-  director --> c4["Commentator: Audio described"] --> v4["Voice"]
-```
+![Architecture: the synthetic match feeds the AI production crew; its rundown goes out as a live stream, an API and an MCP server; the crew runs on Microsoft Foundry and Azure AI Speech inside Azure Container Apps](docs/architecture.svg)
 
 | Role | Does | How |
 |---|---|---|
@@ -144,22 +138,14 @@ Gantry's tools.
 
 ## Microsoft technologies
 
-![Architecture: the synthetic match and its stats feed the AI production crew, which Azure Container Apps serves to browsers and MCP clients](docs/architecture.png)
-
-- **Microsoft Foundry**: the model deployments and the project the crew runs in. Each role uses the cheapest
-  model that does its job well (gpt-5.4-mini for every line on air, gpt-5-mini for the stats desk, director,
-  editor and producer). Foundry's tracing shows every moment the crew produces: the workflow, each executor,
-  each agent and each model call, through the Application Insights connected to the project.
-- **Microsoft Agent Framework** (Python): the crew and editor workflows, executors and typed messages,
-  multi-selection edges for parallel commentators, function tools for the stats desk and producer, structured
-  outputs for the director and editor, and the MCP client in the studio assistant example.
-- **Azure AI Speech**: eighteen neural voices across eight languages with speaking styles for big moments, and
-  speech recognition for spoken questions with short-lived tokens issued by the server.
-- **Azure Container Apps**: the single container that serves the page, its API, the live match feed and the
-  MCP endpoint (`infra/main.bicep`, `scripts/deploy.ps1`).
-- **Microsoft Entra ID**: the server signs in with a managed identity in Azure, and with the Azure CLI login
-  locally. There are no keys in code or configuration.
-- **GitHub Actions**: lint, tests, front-end build and the container image on every push.
+| | What it does in Gantry |
+|---|---|
+| **Microsoft Foundry** | The models: gpt-5.4-mini for every line on air, gpt-5-mini for the other roles. Tracing of every moment in Application Insights. |
+| **Microsoft Agent Framework** | The crew and editor workflows: typed messages, parallel commentators, tools, structured output. The MCP client in the studio assistant. |
+| **Azure AI Speech** | 18 neural voices in eight languages, and speech to text for spoken questions. |
+| **Azure Container Apps** | One container for the page, the live stream, the rundown API and the MCP server (`infra/main.bicep`). |
+| **Microsoft Entra ID** | A managed identity in Azure and the Azure CLI login locally. No keys anywhere. |
+| **GitHub Actions** | Lint, tests, front-end build and the container image on every push. |
 
 ## Synthetic data
 
