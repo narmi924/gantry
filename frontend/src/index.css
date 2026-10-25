@@ -1809,6 +1809,17 @@ main > div {
   grid-template-columns: repeat(3, 1fr);
 }
 
+/* on the wall a caption may use the tile's width and is sized by it, so on a small screen it stays clear of the score bug */
+.wall .caption {
+  width: max-content;
+  max-width: 90%;
+  font-size: clamp(11px, 3cqw, 15px);
+}
+
+.wall .tile-audio .caption {
+  font-size: clamp(11px, 3.6cqw, 18px);
+}
+
 /* on the wall the goal card is a compact lower third */
 .wall .goal {
   left: 4%;
