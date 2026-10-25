@@ -3,6 +3,9 @@
 //
 //   az deployment group create -g rg-gantry -f infra/main.bicep -p foundryName=<your Foundry resource>
 //   (scripts/deploy.ps1 builds the image and does the rest)
+//
+// Without an image this lays the ground: the registry, the environment and an identity with its permissions.
+// With one, it also runs the app. The identity exists (and may pull from the registry) before the app does.
 
 @description('Where everything runs')
 param location string = resourceGroup().location
@@ -72,13 +75,52 @@ resource foundry 'Microsoft.CognitiveServices/accounts@2025-06-01' existing = {
   name: foundryName
 }
 
-resource app 'Microsoft.App/containerApps@2024-03-01' = {
+// the app's own identity: it may call the models and the voices, and pull its own image; nothing else
+resource identity 'Microsoft.ManagedIdentity/userAssignedIdentities@2023-01-31' = {
+  name: '${name}-id'
+  location: location
+}
+
+resource foundryUser 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(foundry.id, identity.id, 'foundry-user')
+  scope: foundry
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '53ca6127-db72-4b80-b1b0-d745d6d5456d')
+    principalId: identity.properties.principalId
+    principalType: 'ServicePrincipal'
+  }
+}
+
+resource cognitiveUser 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(foundry.id, identity.id, 'cognitive-services-user')
+  scope: foundry
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'a97b65f3-24c7-4388-baec-2e87135dc908')
+    principalId: identity.properties.principalId
+    principalType: 'ServicePrincipal'
+  }
+}
+
+resource acrPull 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  name: guid(registry.id, identity.id, 'acr-pull')
+  scope: registry
+  properties: {
+    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '7f951dda-4ed3-4680-a7ca-43fe172d538d')
+    principalId: identity.properties.principalId
+    principalType: 'ServicePrincipal'
+  }
+}
+
+resource app 'Microsoft.App/containerApps@2024-03-01' = if (!empty(image)) {
   name: name
   location: location
-  identity: { type: 'SystemAssigned' }
+  identity: { type: 'UserAssigned', userAssignedIdentities: { '${identity.id}': {} } }
+  dependsOn: [ acrPull, foundryUser, cognitiveUser ]
   properties: {
     managedEnvironmentId: env.id
     configuration: {
+      // one revision at a time: sticky sessions need it, and a broadcast's state lives in that one copy
+      activeRevisionsMode: 'Single'
       ingress: {
         external: true
         targetPort: 8000
@@ -87,17 +129,18 @@ resource app 'Microsoft.App/containerApps@2024-03-01' = {
         stickySessions: { affinity: 'sticky' }
       }
       registries: [
-        { server: registry.properties.loginServer, identity: 'system' }
+        { server: registry.properties.loginServer, identity: identity.id }
       ]
     }
     template: {
       containers: [
         {
           name: 'gantry'
-          image: empty(image) ? 'mcr.microsoft.com/k8se/quickstart:latest' : image
+          image: image
           resources: { cpu: json('1.0'), memory: '2Gi' }
           env: [
             { name: 'GANTRY_PUBLIC', value: '1' }
+            { name: 'AZURE_CLIENT_ID', value: identity.properties.clientId }
             { name: 'AZURE_AI_ENDPOINT', value: foundry.properties.endpoint }
             { name: 'AZURE_AI_PROJECT_ENDPOINT', value: 'https://${foundryName}.services.ai.azure.com/api/projects/${projectName}' }
             { name: 'AZURE_SPEECH_REGION', value: speechRegion }
@@ -115,36 +158,5 @@ resource app 'Microsoft.App/containerApps@2024-03-01' = {
   }
 }
 
-// the app's identity may call the models and the voices, and pull its own image; nothing else
-resource foundryUser 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(foundry.id, app.id, 'foundry-user')
-  scope: foundry
-  properties: {
-    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '53ca6127-db72-4b80-b1b0-d745d6d5456d')
-    principalId: app.identity.principalId
-    principalType: 'ServicePrincipal'
-  }
-}
-
-resource cognitiveUser 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(foundry.id, app.id, 'cognitive-services-user')
-  scope: foundry
-  properties: {
-    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', 'a97b65f3-24c7-4388-baec-2e87135dc908')
-    principalId: app.identity.principalId
-    principalType: 'ServicePrincipal'
-  }
-}
-
-resource acrPull 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  name: guid(registry.id, app.id, 'acr-pull')
-  scope: registry
-  properties: {
-    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', '7f951dda-4ed3-4680-a7ca-43fe172d538d')
-    principalId: app.identity.principalId
-    principalType: 'ServicePrincipal'
-  }
-}
-
-output url string = 'https://${app.properties.configuration.ingress.fqdn}'
+output url string = empty(image) ? '' : 'https://${app!.properties.configuration.ingress.fqdn}'
 output registry string = registry.properties.loginServer

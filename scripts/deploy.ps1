@@ -7,8 +7,15 @@ param(
   [string] $Tag = (Get-Date -Format "yyyyMMddHHmm")
 )
 $ErrorActionPreference = "Stop"
+$PSNativeCommandUseErrorActionPreference = $true   # a failed az call stops the script too
+$env:PYTHONIOENCODING = "utf-8"                     # the build log has characters a non-UTF-8 console can't print
 
-# 1. the environment, registry, monitoring and the app (with a placeholder image the first time)
+# 0. a new subscription has to opt in to Container Apps and Container Registry once
+foreach ($ns in "Microsoft.App", "Microsoft.ContainerRegistry", "Microsoft.OperationalInsights") {
+  az provider register -n $ns --wait -o none
+}
+
+# 1. the ground: registry, environment, monitoring, and the app's identity with its permissions
 $out = az deployment group create -g $ResourceGroup -f infra/main.bicep -p foundryName=$Foundry projectName=$Project `
   --query properties.outputs -o json | ConvertFrom-Json
 $registry = $out.registry.value
@@ -27,7 +34,7 @@ if (-not (Test-Path $production)) {
 # 3. build the image in the registry, with the produced broadcast inside it
 az acr build -r $registry.Split(".")[0] -t "gantry:$Tag" .
 
-# 4. point the app at it
-az deployment group create -g $ResourceGroup -f infra/main.bicep -p foundryName=$Foundry projectName=$Project `
-  image="$registry/gantry:$Tag" | Out-Null
+# 4. run the app on it
+$out = az deployment group create -g $ResourceGroup -f infra/main.bicep -p foundryName=$Foundry projectName=$Project `
+  image="$registry/gantry:$Tag" --query properties.outputs -o json | ConvertFrom-Json
 Write-Host "Gantry is live at $($out.url.value)"
