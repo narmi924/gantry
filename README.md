@@ -47,6 +47,23 @@ are audiences, live, from the same match data.
 another language is entirely in that language: words, voice, graphics, and player and club names in the
 language's own script. The page around it stays in English.
 
+## Why a broadcaster would use it
+
+- **Who it is for:** rights holders and broadcasters. Today every extra commentary track, whether another
+  language, an alternative cast or an audio-described feed, needs another crew, so most matches get one or two.
+  With Gantry an extra feed costs about a dollar of model and speech per match, and adding one is a choice, not a
+  hire.
+- **It fits the production path:** the crew's output is a rundown of timed, machine-readable cues that a graphics
+  partner can render over the live picture, with WebVTT captions for every feed and MCP for studio tools (see
+  [Machine-readable output](#machine-readable-output)).
+- **It is built to run, not just to demo:** one container on Azure Container Apps with a managed identity and no
+  keys, deployed from Bicep, tested on every push. The broadcast delay hides the models' thinking time, fallbacks
+  keep the air from going dead, a dropped connection picks up where the viewer was, and limits stop a busy day
+  from running up the bill.
+- **A first pilot:** add New fan, Analyst and Audio-described feeds to one live match. Measure watch time and
+  drop-off against the standard feed, the cost and time to add each feed, and how often a big moment gets a wrong
+  name or number, or silence.
+
 ## The AI production crew
 
 The crew is organised like a real broadcast team. Each role is an executor in a Microsoft Agent Framework
@@ -136,6 +153,23 @@ back in Ashvale's half 15 times in the last 10 minutes, keeping the pressure on.
 The assistant is an Agent Framework agent that knows nothing about Gantry: everything it says comes from
 Gantry's tools.
 
+## Synthetic data
+
+There is no real data anywhere in Gantry. The match comes from a simulator written for it:
+
+- **Engine** (Python, NumPy): two fictional clubs, Kingsmere FC and Ashvale Athletic, in 4-3-3 and 4-2-3-1,
+  with 22 players and the ball at 10 frames a second. Team shape, pressing and screening, man-marking near goal,
+  runs in behind, recovery runs, tackles, fouls, set pieces, substitutions and fatigue. Every on-ball choice is
+  scored as *how likely it is to work* × *how dangerous the place it gets us*.
+- **Story director**: for the demo, a script shapes each side's tactics and decides in which windows a shot may
+  go in. Every pass, tackle and shot is still played out by the engine. The demo match (seed 60) finishes
+  Kingsmere 2–1 Ashvale: Aldana 30', Adekunle 75', Bankole 90+3'.
+- **Season**: `gantry.sim.season` builds a fictional 20-club league around the match: the table, each club's
+  form, the last meeting and players' season numbers.
+- **Data**: 57,601 frames of tracking data and about 3,600 events of 25 kinds (passes, pressure, possession
+  changes, interceptions, take-ons, tackles, recoveries, shots, set pieces, cards, substitutions and more), with
+  the match metadata, in `backend/data/matches/demo`. The same seed makes the same match again.
+
 ## Microsoft technologies
 
 | | What it does in Gantry |
@@ -146,20 +180,6 @@ Gantry's tools.
 | **Azure Container Apps** | One container for the page, the live stream, the rundown API and the MCP server (`infra/main.bicep`). |
 | **Microsoft Entra ID** | A managed identity in Azure and the Azure CLI login locally. No keys anywhere. |
 | **GitHub Actions** | Lint, tests, front-end build and the container image on every push. |
-
-## Synthetic data
-
-There is no real data anywhere in Gantry. The match comes from a simulator written for it:
-
-- **Engine** (Python, NumPy): two fictional clubs, Kingsmere FC and Ashvale Athletic, in 4-3-3 and 4-2-3-1.
-  Team shape, pressing and screening, man-marking near goal, runs in behind, recovery runs, tackles, fouls, set
-  pieces, substitutions and fatigue. Every on-ball choice is scored as *how likely it is to work* × *how
-  dangerous the place it gets us*.
-- **Story director**: for the demo, a script shapes each side's tactics and decides in which windows a shot may
-  go in. Every pass, tackle and shot is still played out by the engine. The demo match (seed 60) finishes
-  Kingsmere 2–1 Ashvale: Aldana 30', Adekunle 75', Bankole 90+3'.
-- **Season**: `gantry.sim.season` builds the fictional league around the match.
-- **Data**: 57,601 frames of tracking data and about 3,600 events, in `backend/data/matches/demo`.
 
 ## Run it locally
 
